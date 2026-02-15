@@ -1,0 +1,311 @@
+#!/usr/bin/env python3
+"""
+E-ink display module for PVFLL_002
+Renders box status to a 4.2" Waveshare e-ink display (400x300)
+"""
+
+import sys
+import os
+import qrcode
+from PIL import Image, ImageDraw, ImageFont, ImageOps
+from typing import Dict, Any, Tuple
+
+# Waveshare library path
+libdir = "/home/virtual/pvfll/e-Paper/RaspberryPi_JetsonNano/python/lib"
+if os.path.exists(libdir):
+    sys.path.append(libdir)
+
+try:
+    from waveshare_epd import epd4in2_V2
+except ImportError:
+    epd4in2_V2 = None
+
+# Display dimensions
+WIDTH = 400
+HEIGHT = 300
+
+# Global state
+epd = None
+file_icon = None
+full_refresh_counter = 0
+FULL_REFRESH_INTERVAL = 10
+
+# Font config — DejaVuSans on Pi, Arial fallback on macOS
+FONT_PATH_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+FONT_PATH_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+FONT_PATH_REGULAR_FALLBACK = "/Library/Fonts/Arial.ttf"
+FONT_PATH_BOLD_FALLBACK = "/Library/Fonts/Arial Bold.ttf"
+# Matisse EB (Evangelion font) for header — bundled in fonts/
+FONT_PATH_MATISSE = os.path.join(os.path.dirname(__file__), "fonts", "EVA-Matisse_Classic.ttf")
+# Los Angeles (classic Mac font) for subtitle
+FONT_PATH_LOS_ANGELES = os.path.join(os.path.dirname(__file__), "fonts", "LosAngeles.ttf")
+_font_cache: Dict[Tuple[bool, int], ImageFont.ImageFont] = {}
+
+
+def get_font(size: int, bold: bool = False) -> ImageFont.ImageFont:
+    key = (bold, size)
+    if key in _font_cache:
+        return _font_cache[key]
+    primary = FONT_PATH_BOLD if bold else FONT_PATH_REGULAR
+    fallback = FONT_PATH_BOLD_FALLBACK if bold else FONT_PATH_REGULAR_FALLBACK
+    for path in [primary, fallback]:
+        try:
+            font = ImageFont.truetype(path, size)
+            _font_cache[key] = font
+            return font
+        except Exception:
+            continue
+    font = ImageFont.load_default()
+    _font_cache[key] = font
+    return font
+
+
+def init_display():
+    global epd
+    if epd4in2_V2 is None:
+        print("Waveshare library not available, running in image-only mode")
+        return
+    try:
+        epd = epd4in2_V2.EPD()
+        epd.init()
+        epd.Clear()
+        print("E-ink display initialized (4.2\" 400x300)")
+    except Exception as e:
+        print(f"Error initializing display: {e}")
+
+
+def clear_display():
+    if epd is None:
+        return
+    try:
+        white = Image.new('1', (WIDTH, HEIGHT), 255)
+        epd.init()
+        epd.display(epd.getbuffer(white))
+        print("Display cleared")
+    except Exception as e:
+        print(f"Error clearing display: {e}")
+
+
+def sleep_display():
+    if epd is None:
+        return
+    try:
+        epd.sleep()
+        print("Display sleeping")
+    except Exception as e:
+        print(f"Error sleeping display: {e}")
+
+
+def format_size(bytes_value):
+    if bytes_value is None or bytes_value == 0:
+        return "0 B"
+    units = ["B", "KB", "MB", "GB"]
+    size = float(bytes_value)
+    i = 0
+    while size >= 1024 and i < len(units) - 1:
+        size /= 1024
+        i += 1
+    return f"{int(size)} {units[i]}" if i == 0 else f"{size:.1f} {units[i]}"
+
+
+def load_file_icon(icon_size: int = 36):
+    """Load the SVG file icon using cairosvg."""
+    global file_icon
+    try:
+        import cairosvg
+        from io import BytesIO
+
+        svg_path = os.path.join(os.path.dirname(__file__), "images", "file-regular-full.svg")
+        png_data = cairosvg.svg2png(
+            url=svg_path,
+            output_width=icon_size,
+            output_height=icon_size,
+            background_color="rgba(0,0,0,0)",
+        )
+        icon = Image.open(BytesIO(png_data))
+
+        # Composite onto white background
+        white_bg = Image.new('RGB', (icon_size, icon_size), (255, 255, 255))
+        if icon.mode == 'RGBA':
+            mask = icon.split()[-1]
+            white_bg.paste(icon.convert('RGB'), (0, 0), mask)
+        else:
+            white_bg.paste(icon, (0, 0))
+
+        # Convert to 1-bit, invert for draw.bitmap (0=draw, 255=skip)
+        file_icon = ImageOps.invert(white_bg.convert('1'))
+        print(f"File icon loaded: {file_icon.size}")
+        return True
+
+    except ImportError:
+        print("cairosvg not available — install with: pip install cairosvg")
+        return False
+    except Exception as e:
+        print(f"Error loading SVG icon: {e}")
+        return False
+
+
+def draw_box(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int,
+             box_num: int, box_data: Dict[str, Any]):
+    """Draw a single box cell."""
+    font_num = get_font(36, bold=True)
+    font_info = get_font(12)
+
+    # Border
+    draw.rectangle((x, y, x + w, y + h), outline=0, width=2)
+
+    pad = 6
+    has_file = not box_data.get("empty", True) and not box_data.get("error")
+
+    # Box number
+    draw.text((x + pad, y + pad), str(box_num), font=font_num, fill=0)
+
+    # File icon in upper right if there's a file
+    if has_file and file_icon:
+        icon_x = x + w - file_icon.width - pad
+        icon_y = y + pad
+        draw.bitmap((icon_x, icon_y), file_icon, fill=0)
+
+    # Status text below the number
+    text_y = y + pad + 44
+
+    if box_data.get("error"):
+        draw.text((x + pad, text_y), "ERROR", font=font_info, fill=0)
+        msg = str(box_data["error"])[:20]
+        draw.text((x + pad, text_y + 16), msg, font=font_info, fill=0)
+
+    elif box_data.get("empty", True):
+        draw.text((x + pad, text_y), "Empty", font=font_info, fill=0)
+
+    else:
+        name = box_data.get("name", "?")
+        if len(name) > 18:
+            name = name[:15] + "..."
+        size = format_size(box_data.get("size", 0))
+        draw.text((x + pad, text_y), name, font=font_info, fill=0)
+        draw.text((x + pad, text_y + 16), size, font=font_info, fill=0)
+
+
+def make_qr_image(url: str, size: int) -> Image.Image:
+    """Generate a 1-bit QR code image at the given pixel size."""
+    qr = qrcode.QRCode(box_size=1, border=0, error_correction=qrcode.constants.ERROR_CORRECT_L)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white").convert('1')
+    return img.resize((size, size), Image.NEAREST)
+
+
+def create_layout_image(box_data: Dict[int, Dict[str, Any]],
+                        qr_url: str = "https://htmlpg.andrew-boylan.com") -> Image.Image:
+    """Create the full layout image for the 4.2" display."""
+    image = Image.new('1', (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(image)
+
+    margin = 8
+
+    # --- Header row: QR code on left, title text on right ---
+    qr_size = 70
+    qr_img = make_qr_image(qr_url, qr_size)
+    image.paste(qr_img, (margin, margin))
+
+    # Title text — Matisse EB with vertical stretch, centered in header row
+    try:
+        font_header = ImageFont.truetype(FONT_PATH_MATISSE, 22)
+    except Exception:
+        font_header = get_font(20, bold=True)
+    header_text = "HTML Pollinator Garden"
+    text_x = margin + qr_size + 10
+    hbb = draw.textbbox((0, 0), header_text, font=font_header)
+    text_w = hbb[2] - hbb[0]
+    text_h = hbb[3] - hbb[1]
+
+    # Render to temp image, stretch to half QR height, top-aligned with QR
+    stretch_height = qr_size // 2
+    text_img = Image.new('1', (text_w, text_h), 255)
+    text_draw = ImageDraw.Draw(text_img)
+    text_draw.text((-hbb[0], -hbb[1]), header_text, font=font_header, fill=0)
+    stretched = text_img.resize((text_w, stretch_height), Image.NEAREST)
+    image.paste(stretched, (text_x, margin + 2))
+
+    # Subtitle in Los Angeles below the title
+    try:
+        font_sub = ImageFont.truetype(FONT_PATH_LOS_ANGELES, 22)
+    except Exception:
+        font_sub = get_font(16)
+    subtitle_text = "Take a file. Leave a file. "
+    sub_y = margin + stretch_height + 6
+    draw.text((text_x, sub_y), subtitle_text, font=font_sub, fill=0)
+
+    # --- 2x2 grid below header ---
+    top_offset = margin + qr_size + margin
+    box_w = (WIDTH - 3 * margin) // 2
+    box_h = (HEIGHT - top_offset - 2 * margin) // 2
+
+    positions = [
+        (margin, top_offset),
+        (margin + box_w + margin, top_offset),
+        (margin, top_offset + box_h + margin),
+        (margin + box_w + margin, top_offset + box_h + margin),
+    ]
+
+    for i, num in enumerate([1, 2, 3, 4]):
+        x, y = positions[i]
+        draw_box(draw, x, y, box_w, box_h, num, box_data.get(num, {"empty": True}))
+
+    return image
+
+
+def display_boxes(box_data: Dict[int, Dict[str, Any]], force_full=False):
+    """Render box data to the e-ink display."""
+    global full_refresh_counter
+
+    image = create_layout_image(box_data)
+
+    if epd is None:
+        # No hardware — save to file for preview
+        image.save("preview.png")
+        print("Preview saved to preview.png")
+        return
+
+    try:
+        full_refresh_counter += 1
+        use_full = force_full or (full_refresh_counter >= FULL_REFRESH_INTERVAL)
+
+        if use_full:
+            epd.init()
+            epd.display(epd.getbuffer(image))
+            full_refresh_counter = 0
+            print("Display updated (full refresh)")
+        else:
+            try:
+                epd.init_part()
+                epd.display_Partial(epd.getbuffer(image), 0, 0, WIDTH, HEIGHT)
+                print("Display updated (partial refresh)")
+            except AttributeError:
+                epd.init()
+                epd.display(epd.getbuffer(image))
+    except Exception as e:
+        print(f"Error updating display: {e}")
+
+
+def display_centered_message(message: str, font_size: int = 20, bold: bool = True):
+    """Show a single centered message (for boot status, errors, etc.)."""
+    image = Image.new('1', (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(image)
+    font = get_font(font_size, bold=bold)
+
+    bbox = draw.textbbox((0, 0), message, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    draw.text(((WIDTH - tw) // 2, (HEIGHT - th) // 2), message, font=font, fill=0)
+
+    if epd is None:
+        image.save("preview.png")
+        print(f"Preview saved: {message}")
+        return
+
+    try:
+        epd.init()
+        epd.display(epd.getbuffer(image))
+    except Exception as e:
+        print(f"Error displaying message: {e}")
