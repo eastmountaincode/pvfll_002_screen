@@ -337,3 +337,58 @@ def display_centered_message(message: str, font_size: int = 20, bold: bool = Tru
         epd.display(epd.getbuffer(image))
     except Exception as e:
         print(f"Error displaying message: {e}")
+
+
+def display_portal_message():
+    """Show captive portal instructions when WiFi is not connected."""
+    image = Image.new('1', (WIDTH, HEIGHT), 255)
+    draw = ImageDraw.Draw(image)
+
+    lines = [
+        (get_font(22, bold=True), "No WiFi"),
+        (get_font(14), ""),
+        (get_font(14), "To configure, connect to"),
+        (get_font(14), "this device's WiFi:"),
+        (get_font(14), ""),
+        (get_font(16, bold=True), 'Network: "pvfll_002"'),
+        (get_font(16, bold=True), "Password: htmlpg2025"),
+        (get_font(14), ""),
+        (get_font(13), "A setup page will appear,"),
+        (get_font(13), "or go to 192.168.4.1"),
+    ]
+
+    # Calculate total height
+    total_h = 0
+    line_metrics = []
+    for font, text in lines:
+        if text == "":
+            h = 8  # blank line spacing
+        else:
+            bbox = draw.textbbox((0, 0), text, font=font)
+            h = bbox[3] - bbox[1] + 4
+        line_metrics.append(h)
+        total_h += h
+
+    y = (HEIGHT - total_h) // 2
+    for i, (font, text) in enumerate(lines):
+        if text == "":
+            y += line_metrics[i]
+            continue
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw = bbox[2] - bbox[0]
+        draw.text(((WIDTH - tw) // 2, y), text, font=font, fill=0)
+        y += line_metrics[i]
+
+    # Dark mode
+    image = ImageOps.invert(image)
+
+    if epd is None:
+        image.save("preview.png")
+        print("Preview saved: portal message")
+        return
+
+    try:
+        epd.init()
+        epd.display(epd.getbuffer(image))
+    except Exception as e:
+        print(f"Error displaying portal message: {e}")

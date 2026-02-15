@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Captive portal setup for pvfll_002
+# pvfll_002 setup — captive portal + display auto-start
 # Run once on a fresh Pi: sudo bash setup/install.sh
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -30,21 +30,24 @@ cp "$SCRIPT_DIR/portal-dnsmasq.conf" /etc/NetworkManager/dnsmasq-shared.d/portal
 echo "[4/4] Installing systemd services..."
 cp "$SCRIPT_DIR/portal-interface.service" /etc/systemd/system/
 cp "$SCRIPT_DIR/portal-web.service" /etc/systemd/system/
+cp "$SCRIPT_DIR/pvfll-display.service" /etc/systemd/system/
 
 # Remove old dnsmasq service if it was installed previously
 systemctl disable portal-dnsmasq 2>/dev/null || true
 rm -f /etc/systemd/system/portal-dnsmasq.service
 
 systemctl daemon-reload
-systemctl enable portal-interface portal-web
+systemctl enable portal-interface portal-web pvfll-display
 systemctl restart portal-interface
 sleep 2
 systemctl restart portal-web
+systemctl restart pvfll-display
 
 echo ""
 echo "=== Done! ==="
 echo "AP SSID:     pvfll_002"
 echo "AP Password: htmlpg2025"
 echo "Portal URL:  http://192.168.4.1"
+echo "Display:     pvfll-display.service (auto-start)"
 echo ""
 echo "Connect to the 'pvfll_002' WiFi network from your phone to configure."

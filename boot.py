@@ -1,15 +1,17 @@
 import time
-from display import init_display, display_centered_message, load_file_icon
+from display import init_display, display_centered_message, display_portal_message, load_file_icon
 from util import is_wifi_connected
 from api import fetch_all_boxes
 from pusher_events import PusherListener
+
+WIFI_RETRY_INTERVAL = 10  # seconds between WiFi checks
 
 
 def boot_sequence() -> tuple:
     """
     Boot sequence:
       1. Initialize display + load file icon
-      2. Check Wi-Fi connectivity
+      2. Check Wi-Fi connectivity (wait with portal message if not connected)
       3. Connect to Pusher WebSocket
       4. Fetch initial box data
     Returns (box_data, pusher_listener) or (None, None) on failure.
@@ -25,12 +27,16 @@ def boot_sequence() -> tuple:
         print(f"Error initializing display: {e}")
         return None, None
 
-    # Step 2: Check Wi-Fi
+    # Step 2: Check Wi-Fi — show portal instructions and retry until connected
     display_centered_message("Checking Wi-Fi...", font_size=24)
     if not is_wifi_connected():
-        display_centered_message("No Wi-Fi connection", font_size=24)
-        print("No Wi-Fi connection detected")
-        return None, None
+        print("No Wi-Fi — showing captive portal instructions")
+        display_portal_message()
+        while not is_wifi_connected():
+            time.sleep(WIFI_RETRY_INTERVAL)
+        print("Wi-Fi connected!")
+        display_centered_message("Wi-Fi connected!", font_size=24)
+        time.sleep(1)
 
     # Step 3: Connect to Pusher
     display_centered_message("Connecting to WebSocket...", font_size=20)

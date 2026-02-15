@@ -1,0 +1,14 @@
+[Unit]
+Description=PVFLL_002 e-ink display controller
+After=network-online.target portal-interface.service
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/home/pvfll_002/pvfll/pvfll_002_screen
+ExecStart=/usr/bin/python3 /home/pvfll_002/pvfll/pvfll_002_screen/main.py
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
