@@ -100,6 +100,23 @@ def index():
     return render_template("index.html", networks=networks, current=current, ip=ip)
 
 
+@app.route("/disconnect", methods=["POST"])
+def disconnect():
+    current = get_current_connection()
+    if not current:
+        return jsonify({"success": False, "message": "Not connected to any network"})
+    result = subprocess.run(
+        ["nmcli", "con", "down", current],
+        capture_output=True, text=True, timeout=15
+    )
+    if result.returncode == 0:
+        return jsonify({"success": True, "message": f"Disconnected from {current}"})
+    else:
+        err = result.stderr.strip() or result.stdout.strip()
+        msg = re.sub(r"Error:?\s*", "", err) if err else "Disconnect failed"
+        return jsonify({"success": False, "message": msg})
+
+
 @app.route("/connect", methods=["POST"])
 def connect():
     ssid = request.form.get("ssid", "").strip()

@@ -86,6 +86,7 @@
   {% if current %}
     <span class="value connected">{{ current }}</span>
     {% if ip %}<span class="meta" style="margin-left:8px;">({{ ip }})</span>{% endif %}
+    <button onclick="doDisconnect(this)" style="float:right; width:auto; padding:6px 14px; background:#dc2626; font-size:0.85em;">Disconnect</button>
   {% else %}
     <span class="value disconnected">Not connected</span>
   {% endif %}
@@ -123,6 +124,15 @@
 {% endif %}
 
 <script>
+function doDisconnect(btn) {
+  btn.disabled = true;
+  btn.textContent = '...';
+  fetch('/disconnect', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => location.reload())
+    .catch(() => setTimeout(() => location.reload(), 3000));
+}
+
 function selectNetwork(el) {
   document.querySelectorAll('.network').forEach(n => n.classList.remove('selected'));
   el.classList.add('selected');
