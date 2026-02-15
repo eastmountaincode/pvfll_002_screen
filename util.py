@@ -3,22 +3,15 @@ import mimetypes
 
 
 def is_wifi_connected() -> bool:
-    """Check if Wi-Fi is connected and has an IP address on wlan0."""
+    """Check if Wi-Fi client (wlan0) is connected with an IP address via nmcli."""
     try:
         result = subprocess.run(
-            ["iwgetid", "wlan0", "-r"],
+            ["nmcli", "-t", "-f", "NAME,DEVICE,TYPE", "con", "show", "--active"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
-        ssid = result.stdout.strip()
-        if not ssid:
-            return False
-
-        result = subprocess.run(
-            ["ip", "-4", "addr", "show", "wlan0"],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-        for line in result.stdout.splitlines():
-            if "inet " in line and "127.0.0.1" not in line:
+        for line in result.stdout.strip().split("\n"):
+            parts = line.split(":")
+            if len(parts) >= 3 and parts[1] == "wlan0" and parts[2] == "802-11-wireless":
                 return True
         return False
     except Exception:
