@@ -278,6 +278,15 @@ def create_layout_image(box_data: Dict[int, Dict[str, Any]],
     return image
 
 
+def _partial_refresh(image_buffer):
+    """Partial refresh that updates both frame buffers so old pixels clear."""
+    epd.Lut()
+    epd.display_Partial(image_buffer)
+    # Sync "old" buffer (0x26) with current so next partial has correct baseline
+    epd.send_command(0x26)
+    epd.send_data2(image_buffer)
+
+
 def display_boxes(box_data: Dict[int, Dict[str, Any]], force_full=False, qr_url: str = None):
     """Render box data to the e-ink display."""
     kwargs = {}
@@ -292,8 +301,7 @@ def display_boxes(box_data: Dict[int, Dict[str, Any]], force_full=False, qr_url:
         return
 
     try:
-        epd.init()
-        epd.display(epd.getbuffer(image))
+        _partial_refresh(epd.getbuffer(image))
         print("Display updated")
     except Exception as e:
         print(f"Error updating display: {e}")
@@ -316,8 +324,7 @@ def display_centered_message(message: str, font_size: int = 20, bold: bool = Tru
         return
 
     try:
-        epd.init_fast(1)
-        epd.display_Fast(epd.getbuffer(image))
+        _partial_refresh(epd.getbuffer(image))
     except Exception as e:
         print(f"Error displaying message: {e}")
 
@@ -371,7 +378,6 @@ def display_portal_message():
         return
 
     try:
-        epd.init_fast(1)
-        epd.display_Fast(epd.getbuffer(image))
+        _partial_refresh(epd.getbuffer(image))
     except Exception as e:
         print(f"Error displaying portal message: {e}")
