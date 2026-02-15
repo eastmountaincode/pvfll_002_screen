@@ -274,6 +274,9 @@ def create_layout_image(box_data: Dict[int, Dict[str, Any]],
         x, y = positions[i]
         draw_box(draw, x, y, box_w, box_h, num, box_data.get(num, {"empty": True}))
 
+    # Invert for dark mode (white on black)
+    image = ImageOps.invert(image)
+
     return image
 
 
