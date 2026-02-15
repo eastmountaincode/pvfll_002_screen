@@ -27,8 +27,6 @@ HEIGHT = 300
 # Global state
 epd = None
 file_icon = None
-full_refresh_counter = 0
-FULL_REFRESH_INTERVAL = 10
 
 # Font config — DejaVuSans on Pi, Arial fallback on macOS
 FONT_PATH_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
@@ -282,8 +280,6 @@ def create_layout_image(box_data: Dict[int, Dict[str, Any]],
 
 def display_boxes(box_data: Dict[int, Dict[str, Any]], force_full=False, qr_url: str = None):
     """Render box data to the e-ink display."""
-    global full_refresh_counter
-
     kwargs = {}
     if qr_url:
         kwargs["qr_url"] = qr_url
@@ -296,19 +292,9 @@ def display_boxes(box_data: Dict[int, Dict[str, Any]], force_full=False, qr_url:
         return
 
     try:
-        full_refresh_counter += 1
-        use_full = force_full or (full_refresh_counter >= FULL_REFRESH_INTERVAL)
-
-        if use_full:
-            epd.init()
-            epd.display(epd.getbuffer(image))
-            full_refresh_counter = 0
-            print("Display updated (full refresh)")
-        else:
-            epd.init()
-            epd.Lut()
-            epd.display_Partial(epd.getbuffer(image))
-            print("Display updated (partial refresh)")
+        epd.init()
+        epd.display(epd.getbuffer(image))
+        print("Display updated")
     except Exception as e:
         print(f"Error updating display: {e}")
 
