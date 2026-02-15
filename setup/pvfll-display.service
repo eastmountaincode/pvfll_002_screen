@@ -4,6 +4,8 @@ After=network-online.target portal-interface.service
 Wants=network-online.target
 
 [Service]
+User=pvfll_002
+Group=pvfll_002
 WorkingDirectory=/home/pvfll_002/pvfll/pvfll_002_screen
 ExecStart=/usr/bin/python3 /home/pvfll_002/pvfll/pvfll_002_screen/main.py
 Restart=on-failure
