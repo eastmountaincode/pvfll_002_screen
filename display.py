@@ -305,13 +305,10 @@ def display_boxes(box_data: Dict[int, Dict[str, Any]], force_full=False, qr_url:
             full_refresh_counter = 0
             print("Display updated (full refresh)")
         else:
-            try:
-                epd.init_part()
-                epd.display_Partial(epd.getbuffer(image), 0, 0, WIDTH, HEIGHT)
-                print("Display updated (partial refresh)")
-            except AttributeError:
-                epd.init()
-                epd.display(epd.getbuffer(image))
+            epd.init()
+            epd.Lut()
+            epd.display_Partial(epd.getbuffer(image))
+            print("Display updated (partial refresh)")
     except Exception as e:
         print(f"Error updating display: {e}")
 
