@@ -5,22 +5,15 @@ set -e
 # Run once on a fresh Pi: sudo bash setup/install.sh
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
 echo "=== pvfll_002 captive portal setup ==="
 
-# 1. Install dependencies
-echo "[1/5] Installing packages..."
-apt install -y dnsmasq python3-flask
+# 1. Install dependencies (dnsmasq-base is already pulled by NM shared mode)
+echo "[1/4] Installing packages..."
+apt install -y python3-flask
 
-# 2. Stop system dnsmasq from interfering (we run our own instance)
-echo "[2/5] Configuring dnsmasq..."
-systemctl stop dnsmasq
-systemctl disable dnsmasq
-
-# 3. Create NetworkManager AP connection profile
-echo "[3/5] Creating AP connection profile..."
-# Remove if it already exists
+# 2. Create NetworkManager AP connection profile
+echo "[2/4] Creating AP connection profile..."
 nmcli con delete pvfll-portal 2>/dev/null || true
 nmcli con add type wifi ifname wlan1 mode ap con-name pvfll-portal \
     ssid "pvfll_002" \
@@ -29,22 +22,24 @@ nmcli con add type wifi ifname wlan1 mode ap con-name pvfll-portal \
     wifi-sec.key-mgmt wpa-psk \
     wifi-sec.psk "htmlpg2025"
 
-# 4. Install service files and config
-echo "[4/5] Installing systemd services..."
+# 3. DNS hijack config — NM's shared dnsmasq reads from this directory
+echo "[3/4] Configuring DNS hijack..."
+cp "$SCRIPT_DIR/portal-dnsmasq.conf" /etc/NetworkManager/dnsmasq-shared.d/portal.conf
+
+# 4. Install and start systemd services
+echo "[4/4] Installing systemd services..."
 cp "$SCRIPT_DIR/portal-interface.service" /etc/systemd/system/
-cp "$SCRIPT_DIR/portal-dnsmasq.service" /etc/systemd/system/
 cp "$SCRIPT_DIR/portal-web.service" /etc/systemd/system/
 
-mkdir -p /etc/dnsmasq.d
-cp "$SCRIPT_DIR/portal-dnsmasq.conf" /etc/dnsmasq.d/portal.conf
+# Remove old dnsmasq service if it was installed previously
+systemctl disable portal-dnsmasq 2>/dev/null || true
+rm -f /etc/systemd/system/portal-dnsmasq.service
 
-# 5. Enable and start services
-echo "[5/5] Enabling services..."
 systemctl daemon-reload
-systemctl enable portal-interface portal-dnsmasq portal-web
-systemctl start portal-interface
+systemctl enable portal-interface portal-web
+systemctl restart portal-interface
 sleep 2
-systemctl start portal-dnsmasq portal-web
+systemctl restart portal-web
 
 echo ""
 echo "=== Done! ==="
