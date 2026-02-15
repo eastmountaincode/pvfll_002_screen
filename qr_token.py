@@ -24,7 +24,7 @@ def generate_token(timestamp_seconds: int = None) -> str:
         timestamp_seconds = int(time.time())
     time_slot = timestamp_seconds // QR_INTERVAL_SECONDS
     message = f"{DEVICE_ID}{time_slot}"
-    return hmac.new(QR_SECRET.encode(), message.encode(), hashlib.sha256).hexdigest()
+    return hmac.new(QR_SECRET.encode(), message.encode(), hashlib.sha256).hexdigest()[:16]
 
 
 def get_qr_url(timestamp_seconds: int = None) -> str:
