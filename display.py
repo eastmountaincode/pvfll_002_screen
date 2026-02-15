@@ -115,25 +115,32 @@ def load_file_icon(icon_size: int = 36):
         import cairosvg
         from io import BytesIO
 
+        # Render at 4x then downscale for clean edges
+        render_size = icon_size * 4
         svg_path = os.path.join(os.path.dirname(__file__), "images", "file-regular-full.svg")
         png_data = cairosvg.svg2png(
             url=svg_path,
-            output_width=icon_size,
-            output_height=icon_size,
+            output_width=render_size,
+            output_height=render_size,
             background_color="rgba(0,0,0,0)",
         )
         icon = Image.open(BytesIO(png_data))
 
-        # Composite onto white background
-        white_bg = Image.new('RGB', (icon_size, icon_size), (255, 255, 255))
+        # Composite onto white background at high res
+        white_bg = Image.new('RGB', (render_size, render_size), (255, 255, 255))
         if icon.mode == 'RGBA':
             mask = icon.split()[-1]
             white_bg.paste(icon.convert('RGB'), (0, 0), mask)
         else:
             white_bg.paste(icon, (0, 0))
 
-        # Convert to 1-bit, invert for draw.bitmap (0=draw, 255=skip)
-        file_icon = ImageOps.invert(white_bg.convert('1'))
+        # Downscale with LANCZOS, then threshold to clean 1-bit (no dithering)
+        scaled = white_bg.resize((icon_size, icon_size), Image.LANCZOS)
+        gray = scaled.convert('L')
+        # Hard threshold: anything darker than 50% becomes black
+        bw = gray.point(lambda p: 255 if p > 128 else 0, mode='1')
+        # Invert for draw.bitmap (0=draw, 255=skip)
+        file_icon = ImageOps.invert(bw)
         print(f"File icon loaded: {file_icon.size}")
         return True
 
@@ -146,44 +153,54 @@ def load_file_icon(icon_size: int = 36):
 
 
 def draw_box(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int,
-             box_num: int, box_data: Dict[str, Any]):
+             box_num: int, box_data: Dict[str, Any],
+             pad_x: int = 7, pad_y: int = 4,
+             icon_pad_x: int = 2, icon_pad_y: int = 5,
+             text_pad_x: int = 8):
     """Draw a single box cell."""
     font_num = get_font(36, bold=True)
     font_info = get_font(12)
+    font_label = get_font(12, bold=True)
 
     # Border
     draw.rectangle((x, y, x + w, y + h), outline=0, width=2)
 
-    pad = 6
     has_file = not box_data.get("empty", True) and not box_data.get("error")
 
     # Box number
-    draw.text((x + pad, y + pad), str(box_num), font=font_num, fill=0)
+    draw.text((x + pad_x, y + pad_y), str(box_num), font=font_num, fill=0)
 
     # File icon in upper right if there's a file
     if has_file and file_icon:
-        icon_x = x + w - file_icon.width - pad
-        icon_y = y + pad
+        icon_x = x + w - file_icon.width - icon_pad_x
+        icon_y = y + icon_pad_y
         draw.bitmap((icon_x, icon_y), file_icon, fill=0)
 
-    # Status text below the number
-    text_y = y + pad + 44
+    # Status text below the number (use full glyph extent, not just height)
+    num_bbox = draw.textbbox((0, 0), "1", font=font_num)
+    text_y = y + pad_y + num_bbox[3] + 8
+    line_h = 14
 
     if box_data.get("error"):
-        draw.text((x + pad, text_y), "ERROR", font=font_info, fill=0)
+        draw.text((x + text_pad_x, text_y), "ERROR", font=font_info, fill=0)
         msg = str(box_data["error"])[:20]
-        draw.text((x + pad, text_y + 16), msg, font=font_info, fill=0)
+        draw.text((x + text_pad_x, text_y + line_h), msg, font=font_info, fill=0)
 
     elif box_data.get("empty", True):
-        draw.text((x + pad, text_y), "Empty", font=font_info, fill=0)
+        draw.text((x + text_pad_x, text_y), "Empty", font=font_info, fill=0)
 
     else:
         name = box_data.get("name", "?")
         if len(name) > 18:
             name = name[:15] + "..."
+        file_type = box_data.get("type", "")
         size = format_size(box_data.get("size", 0))
-        draw.text((x + pad, text_y), name, font=font_info, fill=0)
-        draw.text((x + pad, text_y + 16), size, font=font_info, fill=0)
+        for i, (label, value) in enumerate([("File: ", name), ("Type: ", file_type), ("Size: ", size)]):
+            lx = x + text_pad_x
+            ly = text_y + line_h * i
+            draw.text((lx, ly), label, font=font_label, fill=0)
+            label_w = draw.textbbox((0, 0), label, font=font_label)[2]
+            draw.text((lx + label_w, ly), value, font=font_info, fill=0)
 
 
 def make_qr_image(url: str, size: int) -> Image.Image:
@@ -203,37 +220,42 @@ def create_layout_image(box_data: Dict[int, Dict[str, Any]],
 
     margin = 8
 
-    # --- Header row: QR code on left, title text on right ---
+    # --- Header spacing controls ---
     qr_size = 70
+    qr_text_gap = 9       # horizontal gap between QR code and title/subtitle
+    title_top_offset = 1   # title vertical nudge from top margin
+    title_sub_gap = 4      # vertical gap between title and subtitle
+
+    # --- Header row: QR code on left, title text on right ---
     qr_img = make_qr_image(qr_url, qr_size)
     image.paste(qr_img, (margin, margin))
 
-    # Title text — Matisse EB with vertical stretch, centered in header row
+    # Title text — Matisse EB with vertical stretch
     try:
         font_header = ImageFont.truetype(FONT_PATH_MATISSE, 22)
     except Exception:
         font_header = get_font(20, bold=True)
     header_text = "HTML Pollinator Garden"
-    text_x = margin + qr_size + 10
+    text_x = margin + qr_size + qr_text_gap
     hbb = draw.textbbox((0, 0), header_text, font=font_header)
     text_w = hbb[2] - hbb[0]
     text_h = hbb[3] - hbb[1]
 
-    # Render to temp image, stretch to half QR height, top-aligned with QR
+    # Render to temp image, stretch to half QR height
     stretch_height = qr_size // 2
     text_img = Image.new('1', (text_w, text_h), 255)
     text_draw = ImageDraw.Draw(text_img)
     text_draw.text((-hbb[0], -hbb[1]), header_text, font=font_header, fill=0)
     stretched = text_img.resize((text_w, stretch_height), Image.NEAREST)
-    image.paste(stretched, (text_x, margin + 2))
+    image.paste(stretched, (text_x, margin + title_top_offset))
 
     # Subtitle in Los Angeles below the title
     try:
-        font_sub = ImageFont.truetype(FONT_PATH_LOS_ANGELES, 22)
+        font_sub = ImageFont.truetype(FONT_PATH_LOS_ANGELES, 23)
     except Exception:
         font_sub = get_font(16)
     subtitle_text = "Take a file. Leave a file. "
-    sub_y = margin + stretch_height + 6
+    sub_y = margin + stretch_height + title_sub_gap
     draw.text((text_x, sub_y), subtitle_text, font=font_sub, fill=0)
 
     # --- 2x2 grid below header ---
