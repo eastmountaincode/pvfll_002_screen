@@ -10,8 +10,8 @@ import qrcode
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from typing import Dict, Any, Tuple
 
-# Waveshare library path
-libdir = "/home/virtual/pvfll/e-Paper/RaspberryPi_JetsonNano/python/lib"
+# Waveshare library path — look relative to home directory
+libdir = os.path.join(os.path.expanduser("~"), "pvfll", "e-Paper", "RaspberryPi_JetsonNano", "python", "lib")
 if os.path.exists(libdir):
     sys.path.append(libdir)
 
