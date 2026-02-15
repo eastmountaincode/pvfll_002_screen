@@ -316,8 +316,8 @@ def display_centered_message(message: str, font_size: int = 20, bold: bool = Tru
         return
 
     try:
-        epd.Lut()
-        epd.display_Partial(epd.getbuffer(image))
+        epd.init_fast(1)
+        epd.display_Fast(epd.getbuffer(image))
     except Exception as e:
         print(f"Error displaying message: {e}")
 
@@ -371,7 +371,7 @@ def display_portal_message():
         return
 
     try:
-        epd.Lut()
-        epd.display_Partial(epd.getbuffer(image))
+        epd.init_fast(1)
+        epd.display_Fast(epd.getbuffer(image))
     except Exception as e:
         print(f"Error displaying portal message: {e}")
