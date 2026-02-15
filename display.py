@@ -280,11 +280,14 @@ def create_layout_image(box_data: Dict[int, Dict[str, Any]],
     return image
 
 
-def display_boxes(box_data: Dict[int, Dict[str, Any]], force_full=False):
+def display_boxes(box_data: Dict[int, Dict[str, Any]], force_full=False, qr_url: str = None):
     """Render box data to the e-ink display."""
     global full_refresh_counter
 
-    image = create_layout_image(box_data)
+    kwargs = {}
+    if qr_url:
+        kwargs["qr_url"] = qr_url
+    image = create_layout_image(box_data, **kwargs)
 
     if epd is None:
         # No hardware — save to file for preview
