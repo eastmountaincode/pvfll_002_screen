@@ -108,19 +108,47 @@ def connect():
     if not ssid:
         return jsonify({"success": False, "message": "No network selected"}), 400
 
-    # Build nmcli command
-    cmd = ["nmcli", "dev", "wifi", "connect", ssid, "ifname", "wlan0"]
-    if password:
-        cmd += ["password", password]
+    con_name = f"portal-{ssid}"
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    # Remove any existing connection for this SSID
+    subprocess.run(
+        ["nmcli", "con", "delete", con_name],
+        capture_output=True, timeout=10
+    )
+
+    # Create connection profile with explicit security properties
+    cmd = [
+        "nmcli", "con", "add",
+        "type", "wifi",
+        "ifname", "wlan0",
+        "con-name", con_name,
+        "ssid", ssid,
+    ]
+    if password:
+        cmd += [
+            "802-11-wireless-security.key-mgmt", "wpa-psk",
+            "802-11-wireless-security.psk", password,
+        ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    if result.returncode != 0:
+        err = result.stderr.strip() or result.stdout.strip()
+        msg = re.sub(r"Error:?\s*", "", err) if err else "Failed to create profile"
+        return jsonify({"success": False, "message": msg})
+
+    # Activate the connection
+    result = subprocess.run(
+        ["nmcli", "con", "up", con_name],
+        capture_output=True, text=True, timeout=30
+    )
 
     if result.returncode == 0:
         return jsonify({"success": True, "message": f"Connected to {ssid}"})
     else:
         err = result.stderr.strip() or result.stdout.strip()
-        # Clean up nmcli error messages
         msg = re.sub(r"Error:?\s*", "", err) if err else "Connection failed"
+        # Clean up the failed profile
+        subprocess.run(["nmcli", "con", "delete", con_name], capture_output=True, timeout=10)
         return jsonify({"success": False, "message": msg})
 
 
