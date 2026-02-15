@@ -316,7 +316,6 @@ def display_centered_message(message: str, font_size: int = 20, bold: bool = Tru
         return
 
     try:
-        epd.init()
         epd.Lut()
         epd.display_Partial(epd.getbuffer(image))
     except Exception as e:
@@ -372,7 +371,6 @@ def display_portal_message():
         return
 
     try:
-        epd.init()
         epd.Lut()
         epd.display_Partial(epd.getbuffer(image))
     except Exception as e:
