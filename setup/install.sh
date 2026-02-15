@@ -19,8 +19,8 @@ nmcli con add type wifi ifname wlan1 mode ap con-name pvfll-portal \
     ssid "pvfll_002" \
     ipv4.method shared \
     ipv4.addresses 192.168.4.1/24 \
-    wifi-sec.key-mgmt wpa-psk \
-    wifi-sec.psk "htmlpg2025"
+    802-11-wireless-security.key-mgmt wpa-psk \
+    802-11-wireless-security.psk "htmlpg2025"
 
 # 3. DNS hijack config — NM's shared dnsmasq reads from this directory
 echo "[3/4] Configuring DNS hijack..."
