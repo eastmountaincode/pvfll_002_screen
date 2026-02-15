@@ -1,0 +1,12 @@
+[Unit]
+Description=dnsmasq DNS hijack for captive portal on wlan1
+After=portal-interface.service
+Requires=portal-interface.service
+
+[Service]
+ExecStart=/usr/sbin/dnsmasq -k -C /etc/dnsmasq.d/portal.conf
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
