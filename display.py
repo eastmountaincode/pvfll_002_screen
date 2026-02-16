@@ -159,6 +159,7 @@ def draw_box(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int,
     font_num = get_font(36, bold=True)
     font_info = get_font(12)
     font_label = get_font(12, bold=True)
+    font_source = get_font(9)  # Smaller font for source info
 
     # Border
     draw.rectangle((x, y, x + w, y + h), outline=0, width=2)
@@ -173,6 +174,32 @@ def draw_box(draw: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int,
         icon_x = x + w - file_icon.width - icon_pad_x
         icon_y = y + icon_pad_y
         draw.bitmap((icon_x, icon_y), file_icon, fill=0)
+
+    # Source library info — two lines, left-aligned next to number
+    source = box_data.get("source")
+    if has_file and source:
+        source_name = source.get("name", "")
+        source_city = source.get("city", "")
+        
+        if source_name:
+            num_bbox_src = draw.textbbox((0, 0), str(box_num), font=font_num)
+            num_width = num_bbox_src[2] - num_bbox_src[0]
+            
+            # Left-aligned, right of number, nudged down slightly
+            source_x = x + pad_x + num_width + 6
+            source_y = y + pad_y + 5
+            line_spacing = 10
+            
+            # Measure "from " width for indent
+            from_width = draw.textbbox((0, 0), "from ", font=font_source)[2]
+            
+            # Line 1: "from" + library name
+            draw.text((source_x, source_y), "from", font=font_source, fill=0)
+            draw.text((source_x + from_width, source_y), source_name, font=font_source, fill=0)
+            
+            # Line 2: city (indented to align with name)
+            if source_city:
+                draw.text((source_x + from_width, source_y + line_spacing), source_city, font=font_source, fill=0)
 
     # Status text below the number (use full glyph extent, not just height)
     num_bbox = draw.textbbox((0, 0), "1", font=font_num)
