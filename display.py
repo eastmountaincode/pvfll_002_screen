@@ -239,7 +239,9 @@ def make_qr_image(url: str, size: int) -> Image.Image:
 
 def create_layout_image(box_data: Dict[int, Dict[str, Any]],
                         qr_url: str = "https://htmlpg.andrew-boylan.com") -> Image.Image:
-    """Create the full layout image for the 4.2" display."""
+    """Create the full layout image for the 4.2" display.
+    Layout: 2x2 box grid on top, header (QR + text) on bottom.
+    """
     image = Image.new('1', (WIDTH, HEIGHT), 255)
     draw = ImageDraw.Draw(image)
 
@@ -248,12 +250,30 @@ def create_layout_image(box_data: Dict[int, Dict[str, Any]],
     # --- Header spacing controls ---
     qr_size = 70
     qr_text_gap = 9       # horizontal gap between QR code and title/subtitle
-    title_top_offset = 1   # title vertical nudge from top margin
+    title_top_offset = 1   # title vertical nudge within header area
     title_sub_gap = 4      # vertical gap between title and subtitle
 
-    # --- Header row: QR code on left, title text on right ---
+    # --- 2x2 grid on top ---
+    header_height = qr_size
+    bottom_start = HEIGHT - margin - header_height
+    box_w = (WIDTH - 3 * margin) // 2
+    box_h = (bottom_start - margin - 2 * margin) // 2
+
+    positions = [
+        (margin, margin),
+        (margin + box_w + margin, margin),
+        (margin, margin + box_h + margin),
+        (margin + box_w + margin, margin + box_h + margin),
+    ]
+
+    for i, num in enumerate([1, 2, 3, 4]):
+        x, y = positions[i]
+        draw_box(draw, x, y, box_w, box_h, num, box_data.get(num, {"empty": True}))
+
+    # --- Header row on bottom: QR code on left, title text on right ---
+    header_y = bottom_start
     qr_img = make_qr_image(qr_url, qr_size)
-    image.paste(qr_img, (margin, margin))
+    image.paste(qr_img, (margin, header_y))
 
     # Title text — Matisse EB with vertical stretch
     try:
@@ -272,7 +292,7 @@ def create_layout_image(box_data: Dict[int, Dict[str, Any]],
     text_draw = ImageDraw.Draw(text_img)
     text_draw.text((-hbb[0], -hbb[1]), header_text, font=font_header, fill=0)
     stretched = text_img.resize((text_w, stretch_height), Image.NEAREST)
-    image.paste(stretched, (text_x, margin + title_top_offset))
+    image.paste(stretched, (text_x, header_y + title_top_offset))
 
     # Subtitle in Los Angeles below the title
     try:
@@ -280,24 +300,8 @@ def create_layout_image(box_data: Dict[int, Dict[str, Any]],
     except Exception:
         font_sub = get_font(16)
     subtitle_text = "Take a file. Leave a file. "
-    sub_y = margin + stretch_height + title_sub_gap
+    sub_y = header_y + stretch_height + title_sub_gap
     draw.text((text_x, sub_y), subtitle_text, font=font_sub, fill=0)
-
-    # --- 2x2 grid below header ---
-    top_offset = margin + qr_size + margin
-    box_w = (WIDTH - 3 * margin) // 2
-    box_h = (HEIGHT - top_offset - 2 * margin) // 2
-
-    positions = [
-        (margin, top_offset),
-        (margin + box_w + margin, top_offset),
-        (margin, top_offset + box_h + margin),
-        (margin + box_w + margin, top_offset + box_h + margin),
-    ]
-
-    for i, num in enumerate([1, 2, 3, 4]):
-        x, y = positions[i]
-        draw_box(draw, x, y, box_w, box_h, num, box_data.get(num, {"empty": True}))
 
     # Invert for dark mode (white on black)
     image = ImageOps.invert(image)
