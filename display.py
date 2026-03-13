@@ -303,9 +303,6 @@ def create_layout_image(box_data: Dict[int, Dict[str, Any]],
     sub_y = header_y + stretch_height + title_sub_gap
     draw.text((text_x, sub_y), subtitle_text, font=font_sub, fill=0)
 
-    # Invert for dark mode (white on black)
-    image = ImageOps.invert(image)
-
     return image
 
 
@@ -336,6 +333,77 @@ def display_boxes(box_data: Dict[int, Dict[str, Any]], force_full=False, qr_url:
         print("Display updated")
     except Exception as e:
         print(f"Error updating display: {e}")
+
+
+# ─── Boot illustration support ───
+BOOT_IMAGES_DIR = os.path.join(os.path.dirname(__file__), "images", "boot")
+BOOT_SPLASH = "boot_splash"
+BOOT_BEES = "bees"
+BOOT_BUTTERFLY = "butterfly"
+BOOT_PSYCHIC = "psychic"
+BOOT_YOYO = "yoyo"
+
+BOOT_TEXT_Y = 242  # Y position for boot message text
+
+_current_boot_img_id = None
+_boot_base_image = None  # Cached image with illustration (no text)
+_boot_img_cache = {}  # Loaded PIL images keyed by img_id
+
+
+def _load_boot_image(img_id: str) -> Image.Image:
+    """Load a preprocessed boot illustration PNG, with caching."""
+    if img_id in _boot_img_cache:
+        return _boot_img_cache[img_id]
+    path = os.path.join(BOOT_IMAGES_DIR, f"{img_id}.png")
+    try:
+        img = Image.open(path).convert('1')
+        _boot_img_cache[img_id] = img
+        return img
+    except Exception as e:
+        print(f"Failed to load boot image {path}: {e}")
+        return None
+
+
+def display_boot_splash(message: str, img_id: str = BOOT_SPLASH):
+    """Show a boot screen with illustration centered at top and message text below."""
+    global _current_boot_img_id, _boot_base_image
+
+    illustration = _load_boot_image(img_id)
+    if illustration is None:
+        # Fallback to plain text if image missing
+        display_centered_message(message)
+        return
+
+    # Build base image with illustration if it changed
+    if img_id != _current_boot_img_id:
+        _current_boot_img_id = img_id
+        _boot_base_image = Image.new('1', (WIDTH, HEIGHT), 255)
+        # Center illustration horizontally at top
+        ix = (WIDTH - illustration.width) // 2
+        _boot_base_image.paste(illustration, (ix, 0))
+
+    # Copy base and draw text
+    image = _boot_base_image.copy()
+    draw = ImageDraw.Draw(image)
+
+    try:
+        font = ImageFont.truetype(FONT_PATH_LOS_ANGELES, 20)
+    except Exception:
+        font = get_font(18)
+
+    bbox = draw.textbbox((0, 0), message, font=font)
+    tw = bbox[2] - bbox[0]
+    draw.text(((WIDTH - tw) // 2, BOOT_TEXT_Y), message, font=font, fill=0)
+
+    if epd is None:
+        image.save("preview.png")
+        print(f"Preview saved: {message}")
+        return
+
+    try:
+        _partial_refresh(epd.getbuffer(image))
+    except Exception as e:
+        print(f"Error displaying boot splash: {e}")
 
 
 def display_centered_message(message: str, font_size: int = 20, bold: bool = True):
@@ -399,9 +467,6 @@ def display_portal_message():
         tw = bbox[2] - bbox[0]
         draw.text(((WIDTH - tw) // 2, y), text, font=font, fill=0)
         y += line_metrics[i]
-
-    # Dark mode
-    image = ImageOps.invert(image)
 
     if epd is None:
         image.save("preview.png")
